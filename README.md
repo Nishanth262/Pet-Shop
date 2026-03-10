@@ -52,16 +52,21 @@ Make sure PostgreSQL is installed and running locally with a database named paws
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/pawshop.git
+git clone [https://github.com/YOUR_USERNAME/pawshop.git](https://github.com/Nishanth262/Pet-Shop.git)
 
 # 2. Install dependencies
 npm install
 
-# 3. Start the Expo dev server
+# 3. create .env add code
+
+DATABASE_URL=postgresql://postgres:nishanth@localhost:5432/pawshop
+PORT=5000
+
+# 4. Start the Expo dev server - terminal 1
 npm run server:dev
 
 
-# 5. Star app 
+# 5. Star app - terminal 2
 npx expo start --tunnel -c
 
 ```

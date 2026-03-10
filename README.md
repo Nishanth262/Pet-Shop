@@ -33,8 +33,13 @@ In the project root folder create a file named:
 
 .env
 Step 2: Add the following variables
-PORT=5000
+
+```bash
+
 DATABASE_URL=postgresql://postgres:nishanth@localhost:5432/pawshop
+PORT=5000
+
+```
 Explanation
 
 PORT → Port number where the Express backend server will run.

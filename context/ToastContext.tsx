@@ -35,6 +35,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const colorScheme = useColorScheme();
   const C = colorScheme === 'dark' ? Colors.dark : Colors.light;
 
+  const nativeDriver = Platform.OS !== 'web';
+
   const showToast = useCallback(
     (message: string, type: ToastType = 'success') => {
       if (timeoutRef.current) {
@@ -48,13 +50,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         Animated.timing(opacity, {
           toValue: 1,
           duration: 220,
-          useNativeDriver: true,
+          useNativeDriver: nativeDriver,
         }),
         Animated.spring(translateY, {
           toValue: 0,
           tension: 80,
           friction: 10,
-          useNativeDriver: true,
+          useNativeDriver: nativeDriver,
         }),
       ]).start();
 
@@ -63,17 +65,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           Animated.timing(opacity, {
             toValue: 0,
             duration: 250,
-            useNativeDriver: true,
+            useNativeDriver: nativeDriver,
           }),
           Animated.timing(translateY, {
             toValue: -20,
             duration: 250,
-            useNativeDriver: true,
+            useNativeDriver: nativeDriver,
           }),
         ]).start(() => setToast(null));
       }, 2500);
     },
-    [opacity, translateY],
+    [opacity, translateY, nativeDriver],
   );
 
   const bgColor =

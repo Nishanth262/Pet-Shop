@@ -19,16 +19,21 @@ import { useToast } from '@/context/ToastContext';
 function CartItemRow({
   item,
   onRemove,
+  onIncrease,
+  onDecrease,
   C,
 }: {
   item: CartItem;
   onRemove: (id: string) => void;
+  onIncrease: (id: string) => void;
+  onDecrease: (id: string) => void;
   C: (typeof Colors)['light'];
 }) {
   const [imgError, setImgError] = React.useState(false);
 
   return (
     <View style={[styles.cartItem, { backgroundColor: C.card }]}>
+      {/* Image */}
       <View style={[styles.itemImageWrapper, { backgroundColor: C.skeleton }]}>
         {imgError ? (
           <Ionicons name="paw" size={28} color={C.textSecondary} />
@@ -42,6 +47,7 @@ function CartItemRow({
         )}
       </View>
 
+      {/* Info */}
       <View style={styles.itemInfo}>
         <Text
           style={[styles.itemName, { color: C.text, fontFamily: 'Inter_600SemiBold' }]}
@@ -55,18 +61,55 @@ function CartItemRow({
         >
           {item.breed} · {item.age}y
         </Text>
+
+        {/* Price row */}
         <View style={styles.itemPriceRow}>
           <Text style={[styles.itemPrice, { color: C.primary, fontFamily: 'Inter_700Bold' }]}>
-            ${item.price.toLocaleString()}
+            ${(item.price * item.quantity).toLocaleString()}
           </Text>
           {item.quantity > 1 && (
-            <Text style={[styles.itemQty, { color: C.textSecondary }]}>
-              × {item.quantity}
+            <Text style={[styles.itemUnitPrice, { color: C.textSecondary }]}>
+              ${item.price.toLocaleString()} each
             </Text>
           )}
         </View>
+
+        {/* +/- quantity stepper */}
+        <View style={styles.stepper}>
+          <Pressable
+            onPress={() => onDecrease(item.id)}
+            style={({ pressed }) => [
+              styles.stepBtn,
+              {
+                backgroundColor: item.quantity === 1 ? C.error + '20' : C.inputBg,
+                opacity: pressed ? 0.7 : 1,
+              },
+            ]}
+          >
+            <Ionicons
+              name={item.quantity === 1 ? 'trash-outline' : 'remove'}
+              size={16}
+              color={item.quantity === 1 ? C.error : C.text}
+            />
+          </Pressable>
+
+          <Text style={[styles.stepCount, { color: C.text, fontFamily: 'Inter_700Bold' }]}>
+            {item.quantity}
+          </Text>
+
+          <Pressable
+            onPress={() => onIncrease(item.id)}
+            style={({ pressed }) => [
+              styles.stepBtn,
+              { backgroundColor: C.primary, opacity: pressed ? 0.7 : 1 },
+            ]}
+          >
+            <Ionicons name="add" size={16} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
+      {/* Trash button */}
       <Pressable
         onPress={() => onRemove(item.id)}
         style={({ pressed }) => [
@@ -84,8 +127,14 @@ export default function CartScreen() {
   const colorScheme = useColorScheme();
   const C = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
-  const { items, removeFromCart, clearCart, getTotal } = useCartStore();
   const { showToast } = useToast();
+
+  const items = useCartStore((s) => s.items);
+  const total = useCartStore((s) => s.total);
+  const count = useCartStore((s) => s.count);
+  const removeFromCart = useCartStore((s) => s.removeFromCart);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const clearCart = useCartStore((s) => s.clearCart);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -99,13 +148,34 @@ export default function CartScreen() {
     [removeFromCart, showToast],
   );
 
+  const handleIncrease = useCallback(
+    (id: string) => {
+      if (Platform.OS !== 'web') Haptics.selectionAsync();
+      updateQuantity(id, +1);
+    },
+    [updateQuantity],
+  );
+
+  const handleDecrease = useCallback(
+    (id: string) => {
+      if (Platform.OS !== 'web') Haptics.selectionAsync();
+      // If qty is 1, decrease removes it — show toast
+      const item = items.find((i) => i.id === id);
+      if (item && item.quantity === 1) {
+        removeFromCart(id);
+        showToast('Item removed from cart', 'info');
+      } else {
+        updateQuantity(id, -1);
+      }
+    },
+    [items, updateQuantity, removeFromCart, showToast],
+  );
+
   const handleClear = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     clearCart();
     showToast('Cart cleared', 'info');
   }, [clearCart, showToast]);
-
-  const total = getTotal();
 
   const renderEmpty = useCallback(
     () => (
@@ -130,23 +200,20 @@ export default function CartScreen() {
             My Cart
           </Text>
           <Text style={[styles.headerSub, { color: C.textSecondary }]}>
-            {items.length} {items.length === 1 ? 'item' : 'items'}
+            {count} {count === 1 ? 'item' : 'items'}
           </Text>
         </View>
         {items.length > 0 && (
           <Pressable
             onPress={handleClear}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              { opacity: pressed ? 0.7 : 1 },
-            ]}
+            style={({ pressed }) => [styles.clearBtn, { opacity: pressed ? 0.7 : 1 }]}
           >
             <Text style={[styles.clearBtnText, { color: C.error }]}>Clear all</Text>
           </Pressable>
         )}
       </View>
     ),
-    [C, topPad, items.length, handleClear],
+    [C, topPad, count, items.length, handleClear],
   );
 
   const renderFooter = useCallback(
@@ -191,7 +258,13 @@ export default function CartScreen() {
         data={items}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <CartItemRow item={item} onRemove={handleRemove} C={C} />
+          <CartItemRow
+            item={item}
+            onRemove={handleRemove}
+            onIncrease={handleIncrease}
+            onDecrease={handleDecrease}
+            C={C}
+          />
         )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
@@ -199,15 +272,14 @@ export default function CartScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         scrollEnabled
+        extraData={`${total}-${count}`}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -215,27 +287,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 20,
   },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  headerSub: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 4,
-  },
-  clearBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  clearBtnText: {
-    fontSize: 14,
-    fontFamily: 'Inter_500Medium',
-  },
-  listContent: {
-    paddingHorizontal: 24,
-    flexGrow: 1,
-  },
+  headerTitle: { fontSize: 28, lineHeight: 34 },
+  headerSub: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 4 },
+  clearBtn: { paddingHorizontal: 14, paddingVertical: 8 },
+  clearBtnText: { fontSize: 14, fontFamily: 'Inter_500Medium' },
+  listContent: { paddingHorizontal: 24, flexGrow: 1 },
   cartItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -257,34 +313,34 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexShrink: 0,
   },
-  itemImage: {
-    width: '100%',
-    height: '100%',
-  },
-  itemInfo: {
-    flex: 1,
-    paddingHorizontal: 12,
-  },
-  itemName: {
-    fontSize: 15,
-    marginBottom: 2,
-  },
-  itemBreed: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: 6,
-  },
+  itemImage: { width: '100%', height: '100%' },
+  itemInfo: { flex: 1, paddingHorizontal: 12 },
+  itemName: { fontSize: 15, marginBottom: 2 },
+  itemBreed: { fontSize: 12, fontFamily: 'Inter_400Regular', marginBottom: 4 },
   itemPriceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    marginBottom: 8,
   },
-  itemPrice: {
+  itemPrice: { fontSize: 16 },
+  itemUnitPrice: { fontSize: 11, fontFamily: 'Inter_400Regular' },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepCount: {
     fontSize: 16,
-  },
-  itemQty: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
+    minWidth: 20,
+    textAlign: 'center',
   },
   removeBtn: {
     width: 38,
@@ -293,6 +349,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   emptyState: {
     flex: 1,
@@ -301,10 +358,7 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     gap: 12,
   },
-  emptyTitle: {
-    fontSize: 22,
-    marginTop: 8,
-  },
+  emptyTitle: { fontSize: 22, marginTop: 8 },
   emptySubtitle: {
     fontSize: 15,
     fontFamily: 'Inter_400Regular',
@@ -330,13 +384,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  totalLabel: {
-    fontSize: 15,
-    fontFamily: 'Inter_500Medium',
-  },
-  totalAmount: {
-    fontSize: 24,
-  },
+  totalLabel: { fontSize: 15, fontFamily: 'Inter_500Medium' },
+  totalAmount: { fontSize: 24 },
   checkoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -350,8 +399,5 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  checkoutText: {
-    color: '#fff',
-    fontSize: 17,
-  },
+  checkoutText: { color: '#fff', fontSize: 17 },
 });

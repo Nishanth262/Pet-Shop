@@ -30,11 +30,15 @@ function PetCard({ pet }: { pet: Pet }) {
   const colorScheme = useColorScheme();
   const C = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const addToCart = useCartStore((s) => s.addToCart);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const removeFromCart = useCartStore((s) => s.removeFromCart);
   const cartItems = useCartStore((s) => s.items);
   const { showToast } = useToast();
   const [imgError, setImgError] = useState(false);
 
-  const inCart = cartItems.some((i) => i.id === pet.id);
+  const cartItem = cartItems.find((i) => i.id === pet.id);
+  const inCart = !!cartItem;
+  const qty = cartItem?.quantity ?? 0;
 
   const handleAddToCart = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -48,6 +52,21 @@ function PetCard({ pet }: { pet: Pet }) {
     });
     showToast(`${pet.name} added to cart!`, 'success');
   }, [pet, addToCart, showToast]);
+
+  const handleIncrease = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
+    updateQuantity(pet.id, +1);
+  }, [pet.id, updateQuantity]);
+
+  const handleDecrease = useCallback(() => {
+    if (Platform.OS !== 'web') Haptics.selectionAsync();
+    if (qty <= 1) {
+      removeFromCart(pet.id);
+      showToast(`${pet.name} removed from cart`, 'info');
+    } else {
+      updateQuantity(pet.id, -1);
+    }
+  }, [pet.id, pet.name, qty, updateQuantity, removeFromCart, showToast]);
 
   return (
     <View style={[styles.card, { backgroundColor: C.card, width: CARD_WIDTH }]}>
@@ -82,27 +101,61 @@ function PetCard({ pet }: { pet: Pet }) {
         >
           {pet.breed}
         </Text>
+
         <View style={styles.cardFooter}>
           <Text style={[styles.petPrice, { color: C.primary, fontFamily: 'Inter_700Bold' }]}>
             ${pet.price.toLocaleString()}
           </Text>
-          <Pressable
-            onPress={handleAddToCart}
-            style={({ pressed }) => [
-              styles.cartBtn,
-              {
-                backgroundColor: inCart ? C.success : C.primary,
-                opacity: pressed ? 0.8 : 1,
-                transform: [{ scale: pressed ? 0.92 : 1 }],
-              },
-            ]}
-          >
-            <Ionicons
-              name={inCart ? 'checkmark' : 'cart-outline'}
-              size={16}
-              color="#fff"
-            />
-          </Pressable>
+
+          {/* Show +/- stepper if in cart, otherwise show Add button */}
+          {inCart ? (
+            <View style={styles.cardStepper}>
+              <Pressable
+                onPress={handleDecrease}
+                style={({ pressed }) => [
+                  styles.cardStepBtn,
+                  {
+                    backgroundColor: qty === 1 ? C.error + '25' : C.inputBg,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={qty === 1 ? 'trash-outline' : 'remove'}
+                  size={13}
+                  color={qty === 1 ? C.error : C.text}
+                />
+              </Pressable>
+
+              <Text style={[styles.cardStepCount, { color: C.text, fontFamily: 'Inter_700Bold' }]}>
+                {qty}
+              </Text>
+
+              <Pressable
+                onPress={handleIncrease}
+                style={({ pressed }) => [
+                  styles.cardStepBtn,
+                  { backgroundColor: C.primary, opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Ionicons name="add" size={13} color="#fff" />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              onPress={handleAddToCart}
+              style={({ pressed }) => [
+                styles.cartBtn,
+                {
+                  backgroundColor: C.primary,
+                  opacity: pressed ? 0.8 : 1,
+                  transform: [{ scale: pressed ? 0.92 : 1 }],
+                },
+              ]}
+            >
+              <Ionicons name="cart-outline" size={16} color="#fff" />
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -264,9 +317,7 @@ export default function ShopScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -274,15 +325,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 20,
   },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  headerSub: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 2,
-  },
+  headerTitle: { fontSize: 28, lineHeight: 34 },
+  headerSub: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 2 },
   featuredCard: {
     marginHorizontal: 24,
     borderRadius: 20,
@@ -302,15 +346,8 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
   },
-  featuredLabel: {
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 1.2,
-  },
-  featuredTitle: {
-    fontSize: 18,
-    marginTop: 2,
-  },
+  featuredLabel: { fontSize: 11, fontFamily: 'Inter_600SemiBold', letterSpacing: 1.2 },
+  featuredTitle: { fontSize: 18, marginTop: 2 },
   refreshBtn: {
     width: 36,
     height: 36,
@@ -323,18 +360,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  featuredImage: {
-    width: '100%',
-    height: '100%',
-  },
-  featuredFallback: {
-    alignItems: 'center',
-    gap: 8,
-  },
-  featuredFallbackText: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-  },
+  featuredImage: { width: '100%', height: '100%' },
+  featuredFallback: { alignItems: 'center', gap: 8 },
+  featuredFallbackText: { fontSize: 13, fontFamily: 'Inter_400Regular' },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -342,24 +370,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 20,
-  },
-  petCount: {
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
-  },
-  listContent: {
-    paddingHorizontal: 24,
-  },
-  columnWrapper: {
-    justifyContent: 'space-between',
-    marginBottom: CARD_MARGIN,
-  },
-  cardWrapper: {
-    flex: 1,
-    maxWidth: CARD_WIDTH,
-  },
+  sectionTitle: { fontSize: 20 },
+  petCount: { fontSize: 13, fontFamily: 'Inter_400Regular' },
+  listContent: { paddingHorizontal: 24 },
+  columnWrapper: { justifyContent: 'space-between', marginBottom: CARD_MARGIN },
+  cardWrapper: { flex: 1, maxWidth: CARD_WIDTH },
   card: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -369,13 +384,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
-  imageContainer: {
-    position: 'relative',
-  },
-  petImage: {
-    width: '100%',
-    height: 130,
-  },
+  imageContainer: { position: 'relative' },
+  petImage: { width: '100%', height: 130 },
   imageFallback: {
     width: '100%',
     height: 130,
@@ -390,31 +400,16 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 8,
   },
-  ageText: {
-    color: '#fff',
-    fontSize: 11,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  cardBody: {
-    padding: 10,
-  },
-  petName: {
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  petBreed: {
-    fontSize: 11,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: 8,
-  },
+  ageText: { color: '#fff', fontSize: 11, fontFamily: 'Inter_600SemiBold' },
+  cardBody: { padding: 10 },
+  petName: { fontSize: 14, marginBottom: 2 },
+  petBreed: { fontSize: 11, fontFamily: 'Inter_400Regular', marginBottom: 8 },
   cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  petPrice: {
-    fontSize: 15,
-  },
+  petPrice: { fontSize: 15 },
   cartBtn: {
     width: 32,
     height: 32,
@@ -422,15 +417,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Inline stepper shown on card when item is in cart
+  cardStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cardStepBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardStepCount: {
+    fontSize: 14,
+    minWidth: 16,
+    textAlign: 'center',
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 60,
     gap: 12,
   },
-  emptyText: {
-    fontSize: 15,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-  },
+  emptyText: { fontSize: 15, fontFamily: 'Inter_400Regular', textAlign: 'center' },
 });

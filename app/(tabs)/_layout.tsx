@@ -15,7 +15,8 @@ import Colors from '@/constants/colors';
 import { useCartStore } from '@/store/cartStore';
 
 function NativeTabLayout() {
-  const cartCount = useCartStore((s) => s.getCount());
+  // ✅ FIX: read reactive `count` state directly instead of calling getCount()
+  const cartCount = useCartStore((s) => s.count);
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
@@ -41,7 +42,8 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const safeAreaInsets = useSafeAreaInsets();
-  const cartCount = useCartStore((s) => s.getCount());
+  // ✅ FIX: read reactive `count` state directly instead of calling getCount()
+  const cartCount = useCartStore((s) => s.count);
   const C = isDark ? Colors.dark : Colors.light;
 
   return (

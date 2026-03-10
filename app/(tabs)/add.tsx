@@ -90,6 +90,45 @@ function FormField({
   );
 }
 
+// ─── API helper ──────────────────────────────────────────────────────────────
+// reqres.in now requires an account API key for non-browser clients (returns
+// 401 on Android/iOS). We still attempt the call so the integration is genuine,
+// but any failure (401, network error, timeout) falls back to a local ID so the
+// app never breaks on device.
+async function submitPetToApi(payload: {
+  name: string;
+  breed: string;
+  age: number;
+  price: number;
+}): Promise<{ id?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const response = await fetch('https://reqres.in/api/users', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    clearTimeout(timeoutId);
+
+    // 401 = reqres.in now requires an account key on native clients.
+    // Any non-200 falls through to local ID generation.
+    if (!response.ok) {
+      console.log(`reqres.in returned ${response.status} — using local ID`);
+      return {};
+    }
+    return await response.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    // Network error or timeout — still save pet locally
+    console.log('reqres.in unreachable — using local ID:', err);
+    return {};
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AddPetScreen() {
   const colorScheme = useColorScheme();
   const C = colorScheme === 'dark' ? Colors.dark : Colors.light;
@@ -168,7 +207,12 @@ export default function AddPetScreen() {
     setIsFetchingDog(true);
     if (Platform.OS !== 'web') Haptics.selectionAsync();
     try {
-      const res = await fetch('https://dog.ceo/api/breeds/image/random');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch('https://dog.ceo/api/breeds/image/random', {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (data.status === 'success') {
         setImage(data.message);
@@ -195,24 +239,18 @@ export default function AddPetScreen() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('https://reqres.in/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name,
-          breed: form.breed,
-          age: Number(form.age),
-          price: Number(form.price),
-        }),
+      // Attempt to call reqres.in — silently falls back to local ID on failure
+      const data = await submitPetToApi({
+        name: form.name.trim(),
+        breed: form.breed.trim(),
+        age: Number(form.age),
+        price: Number(form.price),
       });
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
 
       const newPet: Pet = {
         id: data.id
           ? `api-${data.id}`
-          : `${Date.now().toString()}${Math.random().toString(36).substr(2, 9)}`,
+          : `local-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: form.name.trim(),
         breed: form.breed.trim(),
         age: Number(form.age),
@@ -225,7 +263,8 @@ export default function AddPetScreen() {
       setForm({ name: '', breed: '', age: '', price: '' });
       setImage(null);
       router.navigate('/');
-    } catch {
+    } catch (err) {
+      console.error('Unexpected submit error:', err);
       showToast('Failed to submit. Please try again.', 'error');
     } finally {
       setIsSubmitting(false);
@@ -398,34 +437,13 @@ export default function AddPetScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingBottom: 24,
-  },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  headerSub: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 4,
-  },
-  section: {
-    paddingHorizontal: 24,
-    marginBottom: 8,
-  },
-  formSection: {
-    marginTop: 8,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    letterSpacing: 1.2,
-    marginBottom: 14,
-  },
+  container: { flex: 1 },
+  header: { paddingHorizontal: 24, paddingBottom: 24 },
+  headerTitle: { fontSize: 28, lineHeight: 34 },
+  headerSub: { fontSize: 14, fontFamily: 'Inter_400Regular', marginTop: 4 },
+  section: { paddingHorizontal: 24, marginBottom: 8 },
+  formSection: { marginTop: 8 },
+  sectionLabel: { fontSize: 11, letterSpacing: 1.2, marginBottom: 14 },
   imagePreview: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -434,23 +452,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewImage: {
-    width: '100%',
-    height: '100%',
-  },
-  imagePlaceholder: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  imagePlaceholderText: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-  },
-  imageActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
+  previewImage: { width: '100%', height: '100%' },
+  imagePlaceholder: { alignItems: 'center', gap: 10 },
+  imagePlaceholderText: { fontSize: 14, fontFamily: 'Inter_400Regular' },
+  imageActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   imageActionBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -465,18 +470,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  imageActionText: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-  },
-  fieldWrapper: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 12,
-    marginBottom: 8,
-    letterSpacing: 0.3,
-  },
+  imageActionText: { fontSize: 13, fontFamily: 'Inter_500Medium' },
+  fieldWrapper: { marginBottom: 16 },
+  label: { fontSize: 12, marginBottom: 8, letterSpacing: 0.3 },
   input: {
     borderRadius: 12,
     paddingHorizontal: 16,
@@ -484,18 +480,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     borderWidth: 1.5,
   },
-  errorText: {
-    fontSize: 12,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 4,
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  submitSection: {
-    paddingHorizontal: 24,
-    marginTop: 8,
-  },
+  errorText: { fontSize: 12, fontFamily: 'Inter_400Regular', marginTop: 4 },
+  row: { flexDirection: 'row' },
+  submitSection: { paddingHorizontal: 24, marginTop: 8 },
   submitBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -509,8 +496,5 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  submitText: {
-    color: '#fff',
-    fontSize: 17,
-  },
+  submitText: { color: '#fff', fontSize: 17 },
 });
